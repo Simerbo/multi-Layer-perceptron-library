@@ -5,6 +5,7 @@
 #include<string>
 #include<vector>
 
+
 class Value;
 
 using ValuePtr = std::shared_ptr<Value>; // adding shared ptr
@@ -34,13 +35,21 @@ public:
 		--Value::currentID;
 		// decrement currentID because it is being used to generate unique IDs.
 	}
+	
+	// this function for Forward Propagation
+	static ValuePtr add(const ValuePtr& lhs, const ValuePtr& rhs){
+		// return of the addition of a and b
+		auto out = Value::create(lhs->data+rhs->data, "+");
+		return out;		
+	}	
 
 };
 
 int main(){
 	auto a = Value::create(1.0,"+");
+	auto b = Value::create(2.0,"+");
 	//auto b;
-	//auto c = add(a+b);
+	auto c = Value::add(a,b);
 
 	//  the variables a and b are the two operants that are used in a binary primitive operation of +,-,/,*
 
