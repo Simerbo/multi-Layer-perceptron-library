@@ -138,12 +138,14 @@ public:
 
 		std::unordered_set<std::shared_ptr<Value>, Hash> visited;
 
-		buildTopo(shared_from_this(), visited, topo); // this will used to create a graph by keep going backward
+		buildTopo(shared_from_this(), visited, topo);
 
 		this->grad = 1.0f;
 
 		for(auto it = topo.rbegin(); it != topo.rend(); ++it ){
-			(*it)->backward();
+			if((*it)->backward){
+				(*it)->backward();
+			}
 		}
 
 		for(auto it = topo.begin(); it != topo.end(); ++it ){
