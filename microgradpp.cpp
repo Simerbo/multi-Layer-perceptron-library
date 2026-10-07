@@ -4,7 +4,7 @@
 #include<functional>
 #include<string>
 #include<vector>
-
+#include<cassert>
 
 class Value;
 
@@ -13,13 +13,13 @@ using ValuePtr = std::shared_ptr<Value>; // adding shared ptr
 class Value : public std::enable_shared_from_this<Value>{
 
 
-private:
+public:
 	inline static size_t currentID = 0; // current id would start from zero and when we add a value or remove one, it will load or remove one.
 	float data;
 	float grad;
 	std::string op; // this is the primitive operation that is used to run on the primitive binaries
 	size_t id;
-	std::vector<Value> prev;
+	std::vector<ValuePtr> prev;
 
 private:
 	Value(float data, const std::string &op, size_t id)
@@ -40,8 +40,35 @@ public:
 	static ValuePtr add(const ValuePtr& lhs, const ValuePtr& rhs){
 		// return of the addition of a and b
 		auto out = Value::create(lhs->data+rhs->data, "+");
+		// saving the child value pointer (lhs,rhs)
+		out->prev = {lhs, rhs};
+	
+		return out;	
+	}	
+
+	// this function for Forward Propagation
+	static ValuePtr multiply(const ValuePtr& lhs, const ValuePtr& rhs){
+		// return of the addition of a and b
+		auto out = Value::create(lhs->data*rhs->data, "*");
+		// saving the child value pointer (lhs,rhs)
+		out->prev = {lhs, rhs};
+		
 		return out;		
 	}	
+	
+	// this function for Forward Propagation
+	static ValuePtr subtract(const ValuePtr& lhs, const ValuePtr& rhs){
+		// return of the addition of a and b
+		auto out = Value::create(lhs->data-rhs->data, "-");
+		// saving the child value pointer (lhs,rhs)
+		out->prev = {lhs, rhs};
+		
+		return out;		
+	}	
+	
+	void print(){
+		std::cout<<"[data=" <<this->data << ", grad="<<this->grad <<"]\n";
+	}
 
 };
 
@@ -50,6 +77,15 @@ int main(){
 	auto b = Value::create(2.0,"+");
 	//auto b;
 	auto c = Value::add(a,b);
+	auto d = Value::multiply(c,c);
+
+
+	assert(c->data ==3.0);
+	assert(c->op == "+");
+
+	assert(d->data ==9.0);
+	assert(d->op == "*");
+
 
 	//  the variables a and b are the two operants that are used in a binary primitive operation of +,-,/,*
 
