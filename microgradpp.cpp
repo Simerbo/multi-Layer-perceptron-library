@@ -69,6 +69,68 @@ public:
 		return out;
 	}
 
+
+	static ValuePtr pow(const ValuePtr base, float exponent){
+		float newValue = std::pow(base->data, exponent);
+
+		auto out = Value::create(newValue, "^");
+
+		out->prev = {base};
+
+		out->backward = [
+			base_weak = std::weak_ptr<Value>(base),
+			out_weak = std::weak_ptr<Value>(out),
+			exponent
+		](){
+
+			auto base_ptr = base_weak.lock();
+			auto out_ptr = out_weak.lock();
+
+			if(base_ptr && out_ptr){
+				base_ptr->grad +=
+				exponent *
+				std::pow(base_ptr->data, exponent - 1) *
+				out_ptr->grad;
+			}
+		};
+
+		return out;
+	}
+
+
+	static ValuePtr devide(const ValuePtr& lhs, const ValuePtr& rhs){
+		// return of the division of a and b
+
+		auto reciprocal = pow(rhs, -1);
+
+		return multiply(lhs, reciprocal);
+	}
+
+
+	static ValuePtr relu(const ValuePtr& input){
+		float val = std::max(0.0f,input->data);
+
+		auto out = Value::create(val,"ReLU");
+
+		out->prev = {input};
+
+		out->backward = [input_weak = std::weak_ptr<Value>(input),
+		out_weak = std::weak_ptr<Value>(out)](){
+
+			auto input_ptr = input_weak.lock();
+			auto out_ptr = out_weak.lock();
+
+			if(input_ptr && out_ptr){
+				input_ptr->grad +=
+				(input_ptr->data > 0.0f ? 1.0f : 0.0f) *
+				out_ptr->grad;
+			}
+		};
+
+		return out;
+	}
+
+
 	// this function for Forward Propagation
 	static ValuePtr multiply(const ValuePtr& lhs, const ValuePtr& rhs){
 		// return of the multiplication of a and b
@@ -132,6 +194,7 @@ public:
 		}
 	}
 
+
 	void backProp(){
 
 		std::vector<std::shared_ptr<Value>> topo;
@@ -155,10 +218,11 @@ public:
 
 
 	void print(){
-		std::cout<<"[data=" <<this->data << ", grad="<<this->grad <<"]\n";
+		std::cout<<"[data=" <<this->data << ", grad="<<this->grad<<"]\n";
 	}
 
 };
+
 
 size_t Hash::operator()(const ValuePtr value) const{
 	return std::hash<std::string>()(value->op) ^
