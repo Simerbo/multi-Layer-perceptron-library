@@ -1,3 +1,4 @@
+
 #include<iostream>
 #include<cmath>
 #include <locale>
@@ -7,6 +8,10 @@
 #include<vector>
 #include<cassert>
 #include<unordered_set>
+#include <unordered_map>
+#include <random>
+#include <stdexcept>
+#include <algorithm>
 
 
 class Value;
@@ -44,7 +49,7 @@ public:
 		--Value::currentID;
 		// decrement currentID because it is being used to generate unique IDs.
 	}
-
+	
 	// this function for Forward Propagation
 	static ValuePtr add(const ValuePtr& lhs, const ValuePtr& rhs){
 		// return of the addition of a and b
@@ -88,9 +93,9 @@ public:
 
 			if(base_ptr && out_ptr){
 				base_ptr->grad +=
-				exponent *
-				std::pow(base_ptr->data, exponent - 1) *
-				out_ptr->grad;
+					exponent *
+					std::pow(base_ptr->data, exponent - 1) *
+					out_ptr->grad;
 			}
 		};
 
@@ -98,8 +103,8 @@ public:
 	}
 
 
-	static ValuePtr devide(const ValuePtr& lhs, const ValuePtr& rhs){
-		// return of the division of a and b
+	static ValuePtr divide(const ValuePtr& lhs, const ValuePtr& rhs){
+		// return of the multiplication of a and b
 
 		auto reciprocal = pow(rhs, -1);
 
@@ -112,7 +117,7 @@ public:
 
 		auto out = Value::create(val,"ReLU");
 
-		out->prev = {input};
+		out->prev={input};
 
 		out->backward = [input_weak = std::weak_ptr<Value>(input),
 		out_weak = std::weak_ptr<Value>(out)](){
@@ -122,8 +127,8 @@ public:
 
 			if(input_ptr && out_ptr){
 				input_ptr->grad +=
-				(input_ptr->data > 0.0f ? 1.0f : 0.0f) *
-				out_ptr->grad;
+					(input_ptr->data > 0.0f ? 1.0f : 0.0f) *
+					out_ptr->grad;
 			}
 		};
 
@@ -178,6 +183,30 @@ public:
 	}
 
 
+	static ValuePtr sigmoid(const ValuePtr& input) {
+		float x = input->data;
+		float t = std::exp(x) / (1 + std::exp(x));
+
+		auto out = Value::create(t, "Sigmoid");
+		out->prev = {input};
+
+		out->backward = [
+			input_weak = std::weak_ptr<Value>(input),
+			out_weak = std::weak_ptr<Value>(out),
+			t
+		]() {
+			auto input_ptr = input_weak.lock();
+			auto out_ptr = out_weak.lock();
+
+			if(input_ptr && out_ptr){
+				input_ptr->grad += t * (1 - t) * out_ptr->grad;
+			}
+		};
+
+		return out;
+	}
+
+	
 	void buildTopo(
 		std::shared_ptr<Value> v,
 		std::unordered_set<std::shared_ptr<Value>, Hash>& visited,
@@ -201,7 +230,7 @@ public:
 
 		std::unordered_set<std::shared_ptr<Value>, Hash> visited;
 
-		buildTopo(shared_from_this(), visited, topo);
+		buildTopo(shared_from_this(), visited, topo); // this will create a graph for us
 
 		this->grad = 1.0f;
 
@@ -209,9 +238,7 @@ public:
 			if((*it)->backward){
 				(*it)->backward();
 			}
-		}
 
-		for(auto it = topo.begin(); it != topo.end(); ++it ){
 			(*it)->print();
 		}
 	}
@@ -230,30 +257,164 @@ size_t Hash::operator()(const ValuePtr value) const{
 }
 
 
-int main(){
+// Part 4
 
-	auto a = Value::create(1.0,"+");
-	auto b = Value::create(2.0,"+");
+enum ActivationType{
+	RELU,
+	SIGMOID
+};
 
-	//auto b;
+class Activation{
+	static std::shared_ptr<Value> Relu(const std::shared_ptr<Value>& val){
+		return Value::relu(val);
+	}
 
-	auto c = Value::add(a,b);
+	static std::shared_ptr<Value> Sigmoid(const std::shared_ptr<Value>& val){
+		return Value::sigmoid(val);
+	}
 
-	auto d = Value::multiply(c,c);
+public:
+	static inline std::unordered_map<ActivationType, std::function<std::shared_ptr<Value>(std::shared_ptr<Value>&)>> mActivationFcn = {
+			{ActivationType::RELU, Relu},
+			{ActivationType::SIGMOID, Sigmoid}
+	};
+};
 
 
-	assert(c->data ==3.0);
+
+
+
+
+
+
+
+
+
+
+
+// Function to generate a random float between -1 and 1
+float getRandomFloat() {
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::uniform_real_distribution<> dis(-1, 1);
+	return dis(gen);
+}
+
+class Neuron {
+private:
+	std::vector<ValuePtr> weights;
+	ValuePtr bias = Value::create(0.0);
+	const ActivationType activation_t;
+
+public:
+	Neuron(size_t nin, const ActivationType& activation_t) : activation_t(activation_t) {
+		for (size_t idx = 0; idx < nin; ++idx) {
+			weights.emplace_back(Value::create(getRandomFloat()));
+		}
+	}
+
+//    // For testing
+//    Neuron(size_t nin, float val, const ActivationType& activation_t = ActivationType::SIGMOID)
+//            : activation_t(activation_t) {
+//        for (size_t idx = 0; idx < nin; ++idx) {
+//            weights.emplace_back(Value::create(getRandomFloat()));
+//        }
+//    }
+
+	void zeroGrad() {
+		for (auto& weight : weights) {
+			weight->grad = 0;
+		}
+		bias->grad = 0;
+	}
+
+	// Dot product of a Neuron's weights with the input
+	ValuePtr operator()(const std::vector<ValuePtr>& x) {
+		if (x.size() != weights.size()) {
+			throw std::invalid_argument("Vectors must be of the same length");
+		}
+
+		ValuePtr sum = Value::create(0.0);
+
+		for (size_t idx = 0; idx < weights.size(); ++idx) {
+
+			ValuePtr intermediateVal = Value::multiply(x[idx], weights[idx]);
+			sum = Value::add(sum, intermediateVal);
+		}
+
+		// Add bias
+		//sum->add_inplace(bias);
+		sum = Value::add(sum, bias);
+
+		// Apply activation function
+		const auto& activationFcn = Activation::mActivationFcn.at(activation_t);
+		return activationFcn(sum);
+	}
+
+	std::vector<ValuePtr> parameters() const {
+		std::vector<ValuePtr> out;
+		out.reserve(weights.size() + 1);
+
+		out.insert(out.end(), weights.begin(), weights.end());
+		out.push_back(bias);
+
+		return out;
+	}
+
+	void printParameters() const {
+		printf("Number of Parameters: %zu\n", weights.size() + 1);
+		for (const auto& param : weights) {
+			printf("%f, %f\n", param->data, param->grad);
+		}
+		printf("%f, %f\n", bias->data, bias->grad);
+		printf("\n");
+	}
+
+	size_t getParametersSize() const {
+		return weights.size() + 1;
+	}
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int main()
+{
+	auto a = Value::create(1.0, "");
+	auto b = Value::create(2.0, "");
+	//Value b;
+	auto c = Value::add(a, b); // 3
+	
+	auto d = Value::multiply(c,c); // 9
+	
+	assert(c->data == 3.0);
 	assert(c->op == "+");
-
-	assert(d->data ==9.0);
+	
+	assert(d->data == 9.0);
 	assert(d->op == "*");
-
-
-	auto loss = Value::add(d,d);
+	
+	auto loss = Value::add(d, d); // 9+9 = 18
+	
 	loss->backProp();
-
-
-
+	
+	
+	
 	//  the variables a and b are the two operants that are used in a binary primitive operation of +,-,/,*
 
 	// a -->
@@ -264,4 +425,17 @@ int main(){
 
 	//	auto b = std::shared_ptr<Value>();
 
+
+	// auto d = subtract(a-b);
+
+	// auto e = multiply(c*d);
+
+	// a -->
+	//        +    -->   c ->           L   ->  [a,b,c,d,L]
+	
+	// b -->             +
+                        
+                        // d
+	
+	//auto a = std::shared_ptr<Value>();
 }
